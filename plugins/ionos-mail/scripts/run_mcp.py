@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def main() -> None:
-    project = Path(__file__).resolve().parents[3]
+    project = Path(__file__).resolve().parents[1]
     uv = shutil.which("uv")
     if uv:
         os.environ.setdefault("UV_CACHE_DIR", str(project / ".uv-cache"))

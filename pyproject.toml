@@ -19,4 +19,4 @@ ionos-mail = "ionos_mail_bridge.cli:main"
 ionos-mail-mcp = "ionos_mail_bridge.mcp_server:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["plugins/ionos-mail/src"]

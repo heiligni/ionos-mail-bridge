@@ -1,6 +1,6 @@
 {
   "name": "ionos-mail",
-  "version": "0.1.0",
+  "version": "0.1.0+codex.20260926200208",
   "description": "Read, search, draft, and send IONOS Mail through a local MCP server.",
   "author": {
     "name": "Niclas Heilig"
@@ -12,8 +12,14 @@
     "longDescription": "Read and search mail, create drafts, and send messages through IMAP and SMTP.",
     "developerName": "Niclas Heilig",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
-    "defaultPrompt": ["Show my latest emails.", "Draft a reply to the latest message."]
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Show my latest emails.",
+      "Draft a reply to the latest message."
+    ]
   },
   "mcpServers": "./.mcp.json"
 }

@@ -108,8 +108,9 @@ mark messages as read. Message bodies are limited to 100,000 characters in the
 tool response; attachments are listed by filename but are not downloaded as
 files. The bundled workflow calls `send` only when the user explicitly asks.
 
-The plugin launcher uses `uv` to install the MCP extra in the checkout and
-start the server. Install `uv` from its official distribution, then make sure
+The plugin includes its Python runtime source. Its launcher uses `uv` to
+install the MCP extra inside the installed plugin copy and start the server.
+Install `uv` from its official distribution, then make sure
 `python3` and `uv` are on Codex's `PATH`. As an alternative, install the package
 with the MCP extra and put `ionos-mail-mcp` on `PATH`:
 
@@ -129,8 +130,6 @@ The repository includes `.agents/plugins/marketplace.json` for local plugin
 discovery. From this repository, run `codex plugin marketplace add .`, then
 install **IONOS Mail** from the Plugins Directory in a new Codex chat. The
 plugin runs locally; it is not a hosted ChatGPT plugin or a public MCP service.
-Its Python launcher resolves the project root from the plugin's checkout, so
-keep the repository intact when installing the plugin.
 
 ## Validation
 
