@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "ionos_mail": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["./scripts/run_mcp.py"],
+      "cwd": ".",
+      "env_vars": ["IONOS_MAIL_ADDRESS", "IONOS_MAIL_PASSWORD", "IONOS_IMAP_HOST", "IONOS_IMAP_PORT", "IONOS_SMTP_HOST", "IONOS_SMTP_PORT", "IONOS_DRAFTS_FOLDER"]
+    }
+  }
+}

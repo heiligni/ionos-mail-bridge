@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ionos-mail-bridge"
+version = "0.1.0"
+description = "Local CLI and HTTP API for IONOS Mail over IMAP and SMTP"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Niclas Heilig"}]
+
+[project.optional-dependencies]
+mcp = ["mcp>=2,<3"]
+
+[project.scripts]
+ionos-mail = "ionos_mail_bridge.cli:main"
+ionos-mail-mcp = "ionos_mail_bridge.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
