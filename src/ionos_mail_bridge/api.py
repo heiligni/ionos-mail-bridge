@@ -6,7 +6,7 @@ import hmac
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from .mail import Config, create_draft, list_folders, send_message
+from .mail import Config, create_draft, list_folders, send_message, send_saved_draft
 
 
 def serve(config: Config, token: str, port: int = 8765) -> None:
@@ -47,7 +47,7 @@ def serve(config: Config, token: str, port: int = 8765) -> None:
         def do_POST(self) -> None:
             if not self._authorized():
                 return
-            if self.path not in ("/v1/drafts", "/v1/messages"):
+            if self.path not in ("/v1/drafts", "/v1/drafts/send", "/v1/messages"):
                 self._reply(404, {"error": "Not found"})
                 return
             try:
@@ -58,6 +58,11 @@ def serve(config: Config, token: str, port: int = 8765) -> None:
                 payload = json.loads(self.rfile.read(size))
                 if not isinstance(payload, dict):
                     raise ValueError("JSON body must be an object")
+                if self.path == "/v1/drafts/send":
+                    if set(payload) != {"uid"}:
+                        raise ValueError("Expected only uid")
+                    self._reply(200, send_saved_draft(config, payload["uid"]))
+                    return
                 allowed = {"to", "cc", "bcc", "subject", "body"}
                 if set(payload) - allowed:
                     raise ValueError("Unknown fields: " + ", ".join(sorted(set(payload) - allowed)))

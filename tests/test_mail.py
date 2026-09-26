@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from ionos_mail_bridge.mail import Config, _drafts_folder, compose, create_draft, get_message, list_messages, search_messages, send_message
+from ionos_mail_bridge.mail import Config, _drafts_folder, compose, create_draft, get_message, list_messages, search_messages, send_message, send_saved_draft
 
 
 CONFIG = Config("sender@example.com", "test-password")
@@ -9,6 +9,7 @@ CONFIG = Config("sender@example.com", "test-password")
 
 class FakeIMAP:
     appended = None
+    capabilities = (b"IMAP4rev1", b"UIDPLUS")
 
     def __init__(self, *args, **kwargs):
         pass
@@ -43,6 +44,8 @@ class FakeIMAP:
         if command == "FETCH":
             return "OK", [(b"1 (UID 15 BODY[] {100}",
                             b"From: sender@example.com\r\nTo: reader@example.org\r\nSubject: Example\r\n\r\nHello"), b")"]
+        if command in ("STORE", "EXPUNGE"):
+            return "OK", [b"done"]
         raise AssertionError(command)
 
 
@@ -108,6 +111,26 @@ class MailTests(unittest.TestCase):
         self.assertEqual(listed[0]["uid"], "15")
         self.assertEqual(found[0]["subject"], "Example")
         self.assertEqual(message["body"], "Hello")
+
+    def test_send_saved_draft_removes_only_target_uid(self):
+        class DraftIMAP(FakeIMAP):
+            def uid(self, command, *args):
+                if command == "FETCH":
+                    return "OK", [(b"1 (UID 15 BODY[] {100}",
+                                   b"From: sender@example.com\r\nTo: reader@example.org\r\nBcc: hidden@example.org\r\nSubject: Example\r\n\r\nHello"), b")"]
+                self.last_uid_command = command, args
+                return "OK", [b"done"]
+
+        imap = DraftIMAP()
+        smtp = FakeSMTP()
+        with patch("ionos_mail_bridge.mail.imaplib.IMAP4_SSL", return_value=imap), \
+             patch("ionos_mail_bridge.mail.smtplib.SMTP_SSL", return_value=smtp):
+            result = send_saved_draft(CONFIG, "15")
+        self.assertFalse(result["draft_retained"])
+        self.assertEqual(imap.last_uid_command, ("EXPUNGE", ("15",)))
+        message, _, recipients = smtp.sent
+        self.assertNotIn("Bcc", message)
+        self.assertEqual(recipients, ["reader@example.org", "hidden@example.org"])
 
 
 if __name__ == "__main__":

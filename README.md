@@ -44,6 +44,7 @@ manager. The default servers are `imap.ionos.com:993` with TLS and
 ionos-mail folders
 ionos-mail draft --to person@example.org --subject 'Hello' --body-file message.txt
 ionos-mail send --to person@example.org --subject 'Hello' --body-file message.txt
+ionos-mail send-draft --uid 456
 ```
 
 Use repeated `--to`, `--cc`, and `--bcc` options for multiple recipients.
@@ -54,8 +55,11 @@ The command will not create an arbitrary folder.
 
 `send` submits a new message to SMTP. Its success result means the SMTP server
 accepted the message, not that a recipient received it. It does not add a copy
-to Sent because server behavior has not been verified, and it does not send or
-remove a saved draft. Drafts can be opened and sent in any IMAP mail client.
+to Sent because server behavior has not been verified. `send-draft` submits an
+existing draft by its UID (when the server reports one after creation). After
+SMTP acceptance, it removes only that UID when the server supports UIDPLUS;
+otherwise the result reports `draft_retained: true`. If no UID was returned,
+find the draft with the MCP `messages` tool using the Drafts folder.
 
 ## Local HTTP API
 
@@ -74,6 +78,7 @@ The server binds only to `127.0.0.1`. All mail endpoints need
 | GET | `/health` | Process health only |
 | GET | `/v1/folders` | List IMAP folders and flags |
 | POST | `/v1/drafts` | Save a draft via IMAP |
+| POST | `/v1/drafts/send` | Send an existing draft by `uid` |
 | POST | `/v1/messages` | Submit mail via SMTP |
 
 Both POST endpoints accept JSON fields `to` (array), `cc` (array), `bcc`
@@ -95,8 +100,9 @@ draft or send a duplicate message.
 
 ## Codex MCP plugin
 
-The bundled plugin is at `plugins/ionos-mail/`. Its stdio server offers six
-tools: `folders`, `messages`, `search`, `read_message`, `save_draft`, and `send`.
+The bundled plugin is at `plugins/ionos-mail/`. Its stdio server offers seven
+tools: `folders`, `messages`, `search`, `read_message`, `save_draft`, `send`, and
+`send_draft`.
 Read tools use `BODY.PEEK` and a read-only IMAP folder selection so they do not
 mark messages as read. Message bodies are limited to 100,000 characters in the
 tool response; attachments are listed by filename but are not downloaded as

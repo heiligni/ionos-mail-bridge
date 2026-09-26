@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from .api import serve
-from .mail import Config, create_draft, list_folders, send_message
+from .mail import Config, create_draft, list_folders, send_message, send_saved_draft
 
 
 def _body(args: argparse.Namespace) -> str:
@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
         body.add_argument("--body-file", metavar="PATH")
     api = commands.add_parser("serve", help="Start the local HTTP API")
     api.add_argument("--port", type=int, default=8765)
+    existing = commands.add_parser("send-draft", help="Send an existing IMAP draft by UID")
+    existing.add_argument("--uid", required=True)
     args = parser.parse_args(argv)
     try:
         config = Config.from_env()
@@ -48,6 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "send":
             result = send_message(config, to=args.to, cc=args.cc, bcc=args.bcc,
                                   subject=args.subject, body=_body(args))
+        elif args.command == "send-draft":
+            result = send_saved_draft(config, args.uid)
         else:
             serve(config, os.getenv("IONOS_API_TOKEN", ""), args.port)
             return 0

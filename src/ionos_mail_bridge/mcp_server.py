@@ -5,7 +5,7 @@ from __future__ import annotations
 from mcp.server import MCPServer
 
 from .mail import (Config, create_draft, get_message, list_folders, list_messages,
-                   search_messages, send_message)
+                   search_messages, send_message, send_saved_draft)
 
 
 mcp = MCPServer("ionos-mail")
@@ -51,6 +51,12 @@ def send(to: list[str], subject: str, body: str,
     """Send a new email via IONOS SMTP. Call only when the user explicitly asks to send."""
     return send_message(Config.from_env(), to=to, subject=subject, body=body,
                         cc=cc, bcc=bcc)
+
+
+@mcp.tool()
+def send_draft(uid: str) -> dict[str, str | bool]:
+    """Send an existing draft by UID. Call only when the user explicitly asks to send it."""
+    return send_saved_draft(Config.from_env(), uid)
 
 
 def main() -> None:

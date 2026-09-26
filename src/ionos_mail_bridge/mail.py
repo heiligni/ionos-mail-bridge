@@ -13,7 +13,7 @@ from email.message import EmailMessage
 from email.parser import BytesParser
 from email.policy import SMTP, default
 from email.headerregistry import Address
-from email.utils import formatdate, make_msgid
+from email.utils import formatdate, getaddresses, make_msgid
 
 
 @dataclass(frozen=True)
@@ -274,6 +274,11 @@ def create_draft(config: Config, *, to: list[str], subject: str, body: str,
 def send_message(config: Config, *, to: list[str], subject: str, body: str,
                  cc: list[str] | None = None, bcc: list[str] | None = None) -> dict[str, str]:
     msg, recipients = compose(config, to=to, subject=subject, body=body, cc=cc, bcc=bcc)
+    _submit(config, msg, recipients)
+    return {"message_id": str(msg["Message-ID"]), "status": "accepted_by_smtp"}
+
+
+def _submit(config: Config, msg: EmailMessage, recipients: list[str]) -> None:
     context = ssl.create_default_context()
     if config.smtp_port == 465:
         with smtplib.SMTP_SSL(config.smtp_host, config.smtp_port, context=context, timeout=30) as client:
@@ -288,4 +293,49 @@ def send_message(config: Config, *, to: list[str], subject: str, body: str,
             client.send_message(msg, from_addr=config.address, to_addrs=recipients)
     else:
         raise ValueError("Supported SMTP ports are 465 (TLS) and 587 (STARTTLS)")
-    return {"message_id": str(msg["Message-ID"]), "status": "accepted_by_smtp"}
+
+
+def send_saved_draft(config: Config, uid: str) -> dict[str, str | bool]:
+    """Submit an existing draft, then remove only its own UID if UIDPLUS is available."""
+    if not isinstance(uid, str) or not uid.isascii() or not uid.isdigit():
+        raise ValueError("UID must be a decimal string")
+    with _connect_imap(config) as client:
+        folder = _drafts_folder(config, client)
+        status, _ = client.select(_quote_mailbox(folder), readonly=True)
+        if status != "OK":
+            raise RuntimeError("Could not open Drafts folder")
+        raw = _uid_fetch(client, uid, "(BODY.PEEK[])")
+        msg = BytesParser(policy=SMTP).parsebytes(raw)
+        recipients = []
+        for field in ("To", "Cc", "Bcc"):
+            recipients.extend(_address(addr) for _, addr in getaddresses(msg.get_all(field, [])))
+        if not recipients:
+            raise ValueError("Draft has no recipients")
+        if "Bcc" in msg:
+            del msg["Bcc"]
+        if "From" in msg:
+            del msg["From"]
+        msg["From"] = _address(config.address)
+        if "Date" in msg:
+            del msg["Date"]
+        msg["Date"] = formatdate(localtime=True)
+        if "Message-ID" not in msg:
+            msg["Message-ID"] = make_msgid(domain=_address(config.address).split("@", 1)[1])
+        _submit(config, msg, recipients)
+        result: dict[str, str | bool] = {
+            "message_id": str(msg["Message-ID"]), "status": "accepted_by_smtp",
+            "draft_retained": True,
+        }
+        # Ordinary EXPUNGE could delete unrelated messages. UID EXPUNGE is safe when UIDPLUS exists.
+        if b"UIDPLUS" in client.capabilities:
+            try:
+                status, _ = client.select(_quote_mailbox(folder), readonly=False)
+                if status == "OK":
+                    status, _ = client.uid("STORE", uid, "+FLAGS.SILENT", "(\\Deleted)")
+                    if status == "OK":
+                        status, _ = client.uid("EXPUNGE", uid)
+                        result["draft_retained"] = status != "OK"
+            except Exception:
+                # SMTP acceptance is already final: report it rather than implying a retry is safe.
+                pass
+        return result
