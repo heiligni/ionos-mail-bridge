@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Niclas Heilig"}]
+dependencies = ["keyring>=25,<26"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]

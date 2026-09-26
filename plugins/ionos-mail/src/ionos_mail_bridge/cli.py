@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
 from pathlib import Path
 
 from .api import serve
-from .mail import Config, create_draft, list_folders, send_message, send_saved_draft
+from .credentials import save_account
+from .mail import Config, _address, create_draft, list_folders, send_message, send_saved_draft
 
 
 def _body(args: argparse.Namespace) -> str:
@@ -26,6 +28,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ionos-mail", description="IONOS Mail CLI using IMAP and SMTP")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("folders", help="List IMAP folders and special-use flags")
+    setup = commands.add_parser("configure", help="Store mailbox credentials in the OS keyring")
+    setup.add_argument("--address", required=True)
+    setup.add_argument("--password-stdin", action="store_true", help="Read one password from stdin without echoing it")
     for name in ("draft", "send"):
         command = commands.add_parser(name, help=f"{name.capitalize()} an email")
         command.add_argument("--to", action="append", default=[], metavar="ADDRESS")
@@ -41,6 +46,15 @@ def main(argv: list[str] | None = None) -> int:
     existing.add_argument("--uid", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "configure":
+            if args.password_stdin:
+                password = sys.stdin.readline(4098).rstrip("\r\n")
+            else:
+                password = getpass.getpass("Mailbox password: ")
+            address = _address(args.address)
+            save_account(address, password)
+            print(f"Configured {address} in the OS keyring")
+            return 0
         config = Config.from_env()
         if args.command == "folders":
             result = list_folders(config)

@@ -23,19 +23,19 @@ References: [IONOS mail settings](https://www.ionos.com/help/email/general-topic
 Requires Python 3.11 or newer and an IONOS mailbox password. The mailbox
 address and password are different from IONOS customer account or developer API
 credentials. Do not commit credentials. The `.env.example` file is only a field
-reference; the program reads actual environment variables.
+reference. Use the `configure` command to store the password in the operating
+system keyring; the account file stores only the email address.
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-export IONOS_MAIL_ADDRESS='you@example.com'
-read -s 'IONOS_MAIL_PASSWORD?Mailbox password: '
-export IONOS_MAIL_PASSWORD
+ionos-mail configure --address you@example.com
 ```
 
-The `read -s` example is for zsh. You can use your shell's preferred secret
-manager. The default servers are `imap.ionos.com:993` with TLS and
+The command prompts for the mailbox password without echoing it. Environment
+variables `IONOS_MAIL_ADDRESS` and `IONOS_MAIL_PASSWORD` remain supported and
+take precedence over the saved account. The default servers are `imap.ionos.com:993` with TLS and
 `smtp.ionos.com:465` with TLS. Set `IONOS_SMTP_PORT=587` for STARTTLS.
 
 ## CLI
@@ -122,9 +122,11 @@ ionos-mail-mcp
 ```
 
 The last command waits for an MCP host on stdio and normally prints nothing;
-press Ctrl-C after confirming it starts. Set `IONOS_MAIL_ADDRESS` and
-`IONOS_MAIL_PASSWORD` in the Codex process environment. The plugin manifest
-forwards those names to the MCP subprocess. It does not store the password.
+press Ctrl-C after confirming it starts. Run `ionos-mail configure` once from
+the installed CLI, or set `IONOS_MAIL_ADDRESS` and `IONOS_MAIL_PASSWORD` in
+the Codex process environment. The plugin reads the OS keyring when the
+password environment variable is absent. It never stores the password in the
+repository or plugin files.
 
 The repository includes `.agents/plugins/marketplace.json` for local plugin
 discovery. From this repository, run `codex plugin marketplace add .`, then

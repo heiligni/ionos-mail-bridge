@@ -15,6 +15,8 @@ from email.policy import SMTP, default
 from email.headerregistry import Address
 from email.utils import formatdate, getaddresses, make_msgid
 
+from .credentials import password_for, saved_address
+
 
 @dataclass(frozen=True)
 class Config:
@@ -28,10 +30,10 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
-        address = os.getenv("IONOS_MAIL_ADDRESS", "").strip()
-        password = os.getenv("IONOS_MAIL_PASSWORD", "")
+        address = (os.getenv("IONOS_MAIL_ADDRESS", "") or saved_address()).strip()
+        password = password_for(address) if address else ""
         if not address or not password:
-            raise ValueError("Set IONOS_MAIL_ADDRESS and IONOS_MAIL_PASSWORD")
+            raise ValueError("Run 'ionos-mail configure' or set IONOS_MAIL_ADDRESS and IONOS_MAIL_PASSWORD")
         return cls(
             address=address,
             password=password,
