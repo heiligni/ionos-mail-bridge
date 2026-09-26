@@ -15,7 +15,7 @@ from email.policy import SMTP, default
 from email.headerregistry import Address
 from email.utils import formatdate, getaddresses, make_msgid
 
-from .credentials import password_for, saved_address
+from .credentials import REGIONS, password_for, saved_address, saved_region
 
 
 @dataclass(frozen=True)
@@ -34,12 +34,13 @@ class Config:
         password = password_for(address) if address else ""
         if not address or not password:
             raise ValueError("Run 'ionos-mail configure' or set IONOS_MAIL_ADDRESS and IONOS_MAIL_PASSWORD")
+        domain = REGIONS[saved_region()]
         return cls(
             address=address,
             password=password,
-            imap_host=os.getenv("IONOS_IMAP_HOST", "imap.ionos.com"),
+            imap_host=os.getenv("IONOS_IMAP_HOST") or f"imap.{domain}",
             imap_port=int(os.getenv("IONOS_IMAP_PORT", "993")),
-            smtp_host=os.getenv("IONOS_SMTP_HOST", "smtp.ionos.com"),
+            smtp_host=os.getenv("IONOS_SMTP_HOST") or f"smtp.{domain}",
             smtp_port=int(os.getenv("IONOS_SMTP_PORT", "465")),
             drafts_folder=os.getenv("IONOS_DRAFTS_FOLDER") or None,
         )

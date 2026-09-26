@@ -24,19 +24,23 @@ Requires Python 3.11 or newer and an IONOS mailbox password. The mailbox
 address and password are different from IONOS customer account or developer API
 credentials. Do not commit credentials. The `.env.example` file is only a field
 reference. Use the `configure` command to store the password in the operating
-system keyring; the account file stores only the email address.
+system keyring; the account file stores only the email address and server region.
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
 ionos-mail configure --address you@example.com
+# For mailboxes hosted on the German IONOS servers:
+ionos-mail region de
 ```
 
 The command prompts for the mailbox password without echoing it. Environment
 variables `IONOS_MAIL_ADDRESS` and `IONOS_MAIL_PASSWORD` remain supported and
 take precedence over the saved account. The default servers are `imap.ionos.com:993` with TLS and
-`smtp.ionos.com:465` with TLS. Set `IONOS_SMTP_PORT=587` for STARTTLS.
+`smtp.ionos.com:465` with TLS. `ionos-mail region de` saves the [German IONOS settings](https://www.ionos.de/hilfe/e-mail/allgemeine-themen/serverinformationen-fuer-imap-pop3-und-smtp/):
+`imap.ionos.de:993` and `smtp.ionos.de:465`. Set `IONOS_SMTP_PORT=587` for STARTTLS.
+Explicit `IONOS_IMAP_HOST` and `IONOS_SMTP_HOST` values override the saved region.
 
 ## CLI
 
@@ -58,7 +62,9 @@ accepted the message, not that a recipient received it. It does not add a copy
 to Sent because server behavior has not been verified. `send-draft` submits an
 existing draft by its UID (when the server reports one after creation). After
 SMTP acceptance, it removes only that UID when the server supports UIDPLUS;
-otherwise the result reports `draft_retained: true`. If no UID was returned,
+otherwise the result reports `draft_retained: true`. The tested German IONOS
+mailbox did not advertise UIDPLUS, so its sent test draft remained in Drafts;
+delete it through your mail client after confirming delivery. If no UID was returned,
 find the draft with the MCP `messages` tool using the Drafts folder.
 
 ## Local HTTP API
@@ -140,5 +146,5 @@ python -m unittest discover -s tests -v
 ```
 
 Automated tests mock the mail servers. MCP tool discovery was tested over
-stdio. A live IONOS account has not been used to confirm folder naming or
-message delivery.
+stdio. A live German IONOS mailbox was used to confirm Drafts folder detection,
+draft creation, SMTP submission, and delivery to a connected Gmail account.

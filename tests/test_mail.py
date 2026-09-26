@@ -3,7 +3,7 @@ import os
 import tempfile
 from unittest.mock import patch
 
-from ionos_mail_bridge.credentials import save_account
+from ionos_mail_bridge.credentials import save_account, set_region
 from ionos_mail_bridge.mail import Config, _drafts_folder, compose, create_draft, get_message, list_messages, search_messages, send_message, send_saved_draft
 
 
@@ -85,6 +85,19 @@ class MailTests(unittest.TestCase):
             with open(os.path.join(directory, "ionos-mail-bridge", "account.json"), encoding="utf-8") as handle:
                 self.assertNotIn("secret", handle.read())
             saved.assert_called_once_with("ionos-mail-bridge", "sender@example.com", "secret")
+
+    def test_saved_region_selects_german_servers_and_survives_reconfigure(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {"XDG_CONFIG_HOME": directory,
+                                  "IONOS_MAIL_ADDRESS": "", "IONOS_MAIL_PASSWORD": "",
+                                  "IONOS_IMAP_HOST": "", "IONOS_SMTP_HOST": ""}), \
+             patch("ionos_mail_bridge.credentials.keyring.set_password"), \
+             patch("ionos_mail_bridge.credentials.keyring.get_password", return_value="secret"):
+            set_region("de")
+            save_account("sender@example.com", "secret")
+            config = Config.from_env()
+            self.assertEqual(config.imap_host, "imap.ionos.de")
+            self.assertEqual(config.smtp_host, "smtp.ionos.de")
 
     def test_draft_selects_special_use_and_preserves_bcc(self):
         fake = FakeIMAP()

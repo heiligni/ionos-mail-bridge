@@ -1,6 +1,6 @@
 {
   "name": "ionos-mail",
-  "version": "0.1.0+codex.20260926201217",
+  "version": "0.1.0+codex.20260926201804",
   "description": "Read, search, draft, and send IONOS Mail through a local MCP server.",
   "author": {
     "name": "Niclas Heilig"

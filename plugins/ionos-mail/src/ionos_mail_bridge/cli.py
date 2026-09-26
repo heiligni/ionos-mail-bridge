@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import imaplib
 import json
 import os
+import smtplib
 import sys
 from pathlib import Path
 
 from .api import serve
-from .credentials import save_account
+from .credentials import save_account, set_region
 from .mail import Config, _address, create_draft, list_folders, send_message, send_saved_draft
 
 
@@ -31,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     setup = commands.add_parser("configure", help="Store mailbox credentials in the OS keyring")
     setup.add_argument("--address", required=True)
     setup.add_argument("--password-stdin", action="store_true", help="Read one password from stdin without echoing it")
+    region = commands.add_parser("region", help="Save the IONOS server region without changing credentials")
+    region.add_argument("name", choices=("com", "de"))
     for name in ("draft", "send"):
         command = commands.add_parser(name, help=f"{name.capitalize()} an email")
         command.add_argument("--to", action="append", default=[], metavar="ADDRESS")
@@ -55,6 +59,10 @@ def main(argv: list[str] | None = None) -> int:
             save_account(address, password)
             print(f"Configured {address} in the OS keyring")
             return 0
+        if args.command == "region":
+            set_region(args.name)
+            print(f"Saved IONOS server region: {args.name}")
+            return 0
         config = Config.from_env()
         if args.command == "folders":
             result = list_folders(config)
@@ -71,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return 0
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, imaplib.IMAP4.error, smtplib.SMTPException) as exc:
         print(f"ionos-mail: {exc}", file=sys.stderr)
         return 1
 
