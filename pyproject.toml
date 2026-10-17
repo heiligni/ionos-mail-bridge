@@ -12,6 +12,10 @@ license = "MIT"
 authors = [{name = "Niclas Heilig"}]
 dependencies = ["keyring>=25,<26"]
 
+[project.urls]
+Repository = "https://github.com/heiligni/ionos-mail-bridge"
+Issues = "https://github.com/heiligni/ionos-mail-bridge/issues"
+
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]
 

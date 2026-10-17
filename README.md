@@ -1,150 +1,81 @@
 # IONOS Mail Bridge
 
-A CLI, local HTTP API, and Codex MCP plugin for IONOS Mail Basic and Mail Business. It uses
-the standard mail protocols that IONOS documents: IMAP over TLS for drafts and
-SMTP over TLS for sending. No browser session or Playwright dependency is needed.
+Read mail, prepare drafts and send replies from local tools using IMAP and SMTP.
+Use it as a command-line application, a local HTTP API or a Codex MCP plugin.
+No browser automation or hosted service is required.
 
-## Why IMAP and SMTP?
+Independent community project. Not affiliated with or endorsed by IONOS.
+Early-stage software, licensed under [MIT](LICENSE).
 
-IONOS's published hosting APIs cover DNS, domains, and SSL, but do not document
-mail draft or send endpoints. Its mail service does document IMAP and SMTP. IMAP
-`APPEND` saves an RFC 5322 message in the server's Drafts folder with the
-`\Draft` flag; SMTP submits outgoing mail. The implementation can also work
-with another provider by overriding the host and port environment variables.
+## Quick start
 
-References: [IONOS mail settings](https://www.ionos.com/help/email/general-topics/ionos-mail-server-details-for-imap-pop3-and-smtp/),
-[IONOS developer APIs](https://www.ionos.com/help/hosting/ionos-apis/ionos-developer-apis/),
-[IMAP special-use folders (RFC 6154)](https://www.rfc-editor.org/rfc/rfc6154.html),
-[IMAP APPEND (RFC 9051)](https://www.rfc-editor.org/rfc/rfc9051.html),
-[TLS for mail access and submission (RFC 8314)](https://www.rfc-editor.org/rfc/rfc8314.html).
-
-## Setup
-
-Requires Python 3.11 or newer and an IONOS mailbox password. The mailbox
-address and password are different from IONOS customer account or developer API
-credentials. Do not commit credentials. The `.env.example` file is only a field
-reference. Use the `configure` command to store the password in the operating
-system keyring; the account file stores only the email address and server region.
+Requires Python 3.11+ and an IONOS mailbox. Run these commands from a checkout:
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
 ionos-mail configure --address you@example.com
-# For mailboxes hosted on the German IONOS servers:
+# For German IONOS mailboxes:
 ionos-mail region de
-```
-
-The command prompts for the mailbox password without echoing it. Environment
-variables `IONOS_MAIL_ADDRESS` and `IONOS_MAIL_PASSWORD` remain supported and
-take precedence over the saved account. The default servers are `imap.ionos.com:993` with TLS and
-`smtp.ionos.com:465` with TLS. `ionos-mail region de` saves the [German IONOS settings](https://www.ionos.de/hilfe/e-mail/allgemeine-themen/serverinformationen-fuer-imap-pop3-und-smtp/):
-`imap.ionos.de:993` and `smtp.ionos.de:465`. Set `IONOS_SMTP_PORT=587` for STARTTLS.
-Explicit `IONOS_IMAP_HOST` and `IONOS_SMTP_HOST` values override the saved region.
-
-## CLI
-
-```sh
 ionos-mail folders
-ionos-mail draft --to person@example.org --subject 'Hello' --body-file message.txt
-ionos-mail send --to person@example.org --subject 'Hello' --body-file message.txt
-ionos-mail send-draft --uid 456
+ionos-mail draft --to person@example.org --subject 'Hello' --body 'A draft to review.'
 ```
 
-Use repeated `--to`, `--cc`, and `--bcc` options for multiple recipients.
-`--body 'Text'` or piped standard input also work. `draft` saves to an existing
-IMAP folder marked `\Drafts`, or an existing folder named `Drafts`. Run
-`folders` and set `IONOS_DRAFTS_FOLDER` if the server uses a different name.
-The command will not create an arbitrary folder.
+`configure` prompts for the mailbox password and stores it in your operating
+system keyring. The last command saves a draft; it does not send mail.
+See [configuration](docs/configuration.md) for regions, environment overrides
+and troubleshooting, or [MCP setup](docs/mcp.md) to use the tools in Codex.
 
-`send` submits a new message to SMTP. Its success result means the SMTP server
-accepted the message, not that a recipient received it. It does not add a copy
-to Sent because server behavior has not been verified. `send-draft` submits an
-existing draft by its UID (when the server reports one after creation). After
-SMTP acceptance, it removes only that UID when the server supports UIDPLUS;
-otherwise the result reports `draft_retained: true`. The tested German IONOS
-mailbox did not advertise UIDPLUS, so its sent test draft remained in Drafts;
-delete it through your mail client after confirming delivery. If no UID was returned,
-find the draft with the MCP `messages` tool using the Drafts folder.
+## What it does
 
-## Local HTTP API
+| Feature | CLI | HTTP | MCP |
+| --- | --- | --- | --- |
+| List folders | Yes | Yes | Yes |
+| Search and read mail | No | No | Yes |
+| Create drafts and send mail | Yes | Yes | Yes |
+| Send a saved draft | Yes | Yes | Yes |
+| Threaded replies | No | No | Yes |
+| Delete a draft | No | No | Yes, requires UIDPLUS |
 
-Set a random bearer token and start the server:
+Read operations leave messages unread. Replies include `In-Reply-To` and
+`References` so mail clients can keep the conversation together. Message bodies
+are plain text; attachments are listed on reads, but sending attachments and
+HTML composition are not implemented.
 
-```sh
-export IONOS_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-ionos-mail serve --port 8765
-```
+SMTP acceptance does not confirm delivery. Sent drafts may remain in Drafts
+when the server lacks UIDPLUS; do not resend them. Permanent draft deletion is
+also unavailable without UIDPLUS. See [security and operational limits](SECURITY.md).
 
-The server binds only to `127.0.0.1`. All mail endpoints need
-`Authorization: Bearer <IONOS_API_TOKEN>`. Endpoints:
+## Documentation
 
-| Method | Path | Action |
-| --- | --- | --- |
-| GET | `/health` | Process health only |
-| GET | `/v1/folders` | List IMAP folders and flags |
-| POST | `/v1/drafts` | Save a draft via IMAP |
-| POST | `/v1/drafts/send` | Send an existing draft by `uid` |
-| POST | `/v1/messages` | Submit mail via SMTP |
+- [Configuration](docs/configuration.md): credentials, regions, environment and troubleshooting
+- [CLI](docs/cli.md): draft and send commands
+- [Local HTTP API](docs/http-api.md): endpoints, payloads and responses
+- [MCP and Codex](docs/mcp.md): tools, installation and reply workflow
+- [Architecture](docs/architecture.md): repository map, module responsibilities and verification scope
+- [Contributing](CONTRIBUTING.md): development setup and tests
+- [Security](SECURITY.md): trust model and vulnerability reporting
 
-Both POST endpoints accept JSON fields `to` (array), `cc` (array), `bcc`
-(array), `subject` (string), and `body` (string). At least one recipient is
-required. For example:
+## Development
 
 ```sh
-curl -fsS http://127.0.0.1:8765/v1/drafts \
-  -H "Authorization: Bearer $IONOS_API_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"to":["person@example.org"],"subject":"Hello","body":"Draft text"}'
-```
-
-Switch the path to `/v1/messages` to send. A draft's `bcc` is saved in its
-message for later editing; a sent message uses Bcc only in the SMTP envelope.
-Do not expose this local API to the public Internet. POST requests are not
-idempotent; retrying after an uncertain network failure can create a duplicate
-draft or send a duplicate message.
-
-## Codex MCP plugin
-
-The bundled plugin is at `plugins/ionos-mail/`. Its stdio server offers seven
-tools: `folders`, `messages`, `search`, `read_message`, `save_draft`, `send`, and
-`send_draft`.
-Read tools use `BODY.PEEK` and a read-only IMAP folder selection so they do not
-mark messages as read. Message bodies are limited to 100,000 characters in the
-tool response; attachments are listed by filename but are not downloaded as
-files. The bundled workflow calls `send` only when the user explicitly asks.
-
-The plugin includes its Python runtime source. Its launcher uses `uv` to
-install the MCP extra inside the installed plugin copy and start the server.
-Install `uv` from its official distribution, then make sure
-`python3` and `uv` are on Codex's `PATH`. As an alternative, install the package
-with the MCP extra and put `ionos-mail-mcp` on `PATH`:
-
-```sh
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install '.[mcp]'
-ionos-mail-mcp
-```
-
-The last command waits for an MCP host on stdio and normally prints nothing;
-press Ctrl-C after confirming it starts. Run `ionos-mail configure` once from
-the installed CLI, or set `IONOS_MAIL_ADDRESS` and `IONOS_MAIL_PASSWORD` in
-the Codex process environment. The plugin reads the OS keyring when the
-password environment variable is absent. It never stores the password in the
-repository or plugin files.
-
-The repository includes `.agents/plugins/marketplace.json` for local plugin
-discovery. From this repository, run `codex plugin marketplace add .`, then
-install **IONOS Mail** from the Plugins Directory in a new Codex chat. The
-plugin runs locally; it is not a hosted ChatGPT plugin or a public MCP service.
-
-## Validation
-
-```sh
+python -m pip install -e '.[mcp]'
 python -m unittest discover -s tests -v
 ```
 
-Automated tests mock the mail servers. MCP tool discovery was tested over
-stdio. A live German IONOS mailbox was used to confirm Drafts folder detection,
-draft creation, SMTP submission, and delivery to a connected Gmail account.
+Tests run offline with fake mail servers and need no credentials. GitHub Actions
+runs the suite on Python 3.11, 3.12 and 3.13. Live German IONOS/Gmail checks have
+confirmed delivery and reply threading; other providers and live UIDPLUS deletion
+remain unverified. This project has no guaranteed support response time.
+
+## Protocols
+
+The bridge uses IMAP over TLS for mailbox operations and SMTP over TLS for
+submission. Other providers can be configured through host/port overrides.
+
+References: [IONOS settings](https://www.ionos.com/help/email/general-topics/ionos-mail-server-details-for-imap-pop3-and-smtp/),
+[German IONOS settings](https://www.ionos.de/hilfe/e-mail/allgemeine-themen/serverinformationen-fuer-imap-pop3-und-smtp/),
+[IMAP special-use folders](https://www.rfc-editor.org/rfc/rfc6154.html),
+[IMAP](https://www.rfc-editor.org/rfc/rfc9051.html),
+[mail TLS](https://www.rfc-editor.org/rfc/rfc8314.html).

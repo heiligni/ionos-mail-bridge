@@ -255,9 +255,31 @@ def list_folders(config: Config) -> list[dict[str, str]]:
                  "name": name.decode("ascii", "replace")} for flags, name in _mailboxes(client)]
 
 
+def _reply_headers(config: Config, msg: EmailMessage, uid: str | None, folder: str) -> None:
+    if uid is None:
+        return
+
+    def action(client):
+        raw = _uid_fetch(client, uid, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID REFERENCES IN-REPLY-TO)])")
+        return BytesParser(policy=default).parsebytes(raw)
+
+    original = _selected(config, folder, action)
+    parent = str(original.get("Message-ID", "")).strip()
+    pattern = r"<[^<>\s]+@[^<>\s]+>"
+    if not re.fullmatch(pattern, parent):
+        raise ValueError("Original message needs a valid Message-ID to reply")
+    history = original.get("References") or original.get("In-Reply-To", "")
+    references = re.findall(pattern, str(history))
+    references = list(dict.fromkeys([*references, parent]))
+    msg["In-Reply-To"] = parent
+    msg["References"] = " ".join(references)
+
+
 def create_draft(config: Config, *, to: list[str], subject: str, body: str,
-                 cc: list[str] | None = None, bcc: list[str] | None = None) -> dict[str, str]:
+                 cc: list[str] | None = None, bcc: list[str] | None = None,
+                 reply_to_uid: str | None = None, reply_to_folder: str = "INBOX") -> dict[str, str]:
     msg, _ = compose(config, to=to, subject=subject, body=body, cc=cc, bcc=bcc, draft=True)
+    _reply_headers(config, msg, reply_to_uid, reply_to_folder)
     with imaplib.IMAP4_SSL(config.imap_host, config.imap_port, ssl_context=ssl.create_default_context()) as client:
         client.login(config.address, config.password)
         folder = _drafts_folder(config, client)
@@ -273,13 +295,13 @@ def create_draft(config: Config, *, to: list[str], subject: str, body: str,
                 result["uid"] = parts[-1].decode("ascii")
         return result
 
-
 def send_message(config: Config, *, to: list[str], subject: str, body: str,
-                 cc: list[str] | None = None, bcc: list[str] | None = None) -> dict[str, str]:
+                 cc: list[str] | None = None, bcc: list[str] | None = None,
+                 reply_to_uid: str | None = None, reply_to_folder: str = "INBOX") -> dict[str, str]:
     msg, recipients = compose(config, to=to, subject=subject, body=body, cc=cc, bcc=bcc)
+    _reply_headers(config, msg, reply_to_uid, reply_to_folder)
     _submit(config, msg, recipients)
     return {"message_id": str(msg["Message-ID"]), "status": "accepted_by_smtp"}
-
 
 def _submit(config: Config, msg: EmailMessage, recipients: list[str]) -> None:
     context = ssl.create_default_context()
@@ -342,3 +364,25 @@ def send_saved_draft(config: Config, uid: str) -> dict[str, str | bool]:
                 # SMTP acceptance is already final: report it rather than implying a retry is safe.
                 pass
         return result
+
+
+def delete_saved_draft(config: Config, uid: str) -> dict[str, str]:
+    """Permanently remove exactly one draft, requiring UIDPLUS."""
+    if not isinstance(uid, str) or not uid.isascii() or not uid.isdigit() or int(uid) < 1:
+        raise ValueError("UID must be a positive decimal string")
+    with _connect_imap(config) as client:
+        folder = _drafts_folder(config, client)
+        if b"UIDPLUS" not in client.capabilities:
+            raise RuntimeError("Server lacks UIDPLUS; draft was not modified. Safe individual deletion is unavailable")
+        status, _ = client.select(_quote_mailbox(folder), readonly=False)
+        if status != "OK":
+            raise RuntimeError("Could not open Drafts folder")
+        # Ensure the UID exists before STORE, which can succeed for nonexistent UIDs.
+        _uid_fetch(client, uid, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+        status, _ = client.uid("STORE", uid, "+FLAGS.SILENT", "(\\Deleted)")
+        if status != "OK":
+            raise RuntimeError("Could not mark draft for deletion")
+        status, _ = client.uid("EXPUNGE", uid)
+        if status != "OK":
+            raise RuntimeError("UID EXPUNGE failed; draft may remain marked Deleted. Check before retrying")
+        return {"uid": uid, "folder": folder.decode("ascii", "replace"), "status": "deleted"}

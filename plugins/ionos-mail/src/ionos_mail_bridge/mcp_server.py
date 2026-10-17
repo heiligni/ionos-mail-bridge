@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from mcp.server import MCPServer
 
-from .mail import (Config, create_draft, get_message, list_folders, list_messages,
+from .mail import (Config, create_draft, delete_saved_draft, get_message, list_folders, list_messages,
                    search_messages, send_message, send_saved_draft)
 
 
@@ -39,24 +39,34 @@ def read_message(uid: str, folder: str = "INBOX") -> dict:
 
 @mcp.tool()
 def save_draft(to: list[str], subject: str, body: str,
-               cc: list[str] | None = None, bcc: list[str] | None = None) -> dict[str, str]:
-    """Save a new draft in the mailbox's existing Drafts folder. Does not send it."""
+               cc: list[str] | None = None, bcc: list[str] | None = None,
+               reply_to_uid: str | None = None, reply_to_folder: str = "INBOX") -> dict[str, str]:
+    """Save a new draft in the mailbox's existing Drafts folder. Does not send it. For replies, pass the original UID and folder; keep its subject with Re: and use Reply-To or From as recipient."""
     return create_draft(Config.from_env(), to=to, subject=subject, body=body,
-                        cc=cc, bcc=bcc)
+                        cc=cc, bcc=bcc, reply_to_uid=reply_to_uid,
+                        reply_to_folder=reply_to_folder)
 
 
 @mcp.tool()
 def send(to: list[str], subject: str, body: str,
-         cc: list[str] | None = None, bcc: list[str] | None = None) -> dict[str, str]:
-    """Send a new email via IONOS SMTP. Call only when the user explicitly asks to send."""
+         cc: list[str] | None = None, bcc: list[str] | None = None,
+               reply_to_uid: str | None = None, reply_to_folder: str = "INBOX") -> dict[str, str]:
+    """Send a new email via IONOS SMTP. Call only when the user explicitly asks to send. For replies pass the original UID and folder, reply subject and recipient."""
     return send_message(Config.from_env(), to=to, subject=subject, body=body,
-                        cc=cc, bcc=bcc)
+                        cc=cc, bcc=bcc, reply_to_uid=reply_to_uid,
+                        reply_to_folder=reply_to_folder)
 
 
 @mcp.tool()
 def send_draft(uid: str) -> dict[str, str | bool]:
     """Send an existing draft by UID. Call only when the user explicitly asks to send it."""
     return send_saved_draft(Config.from_env(), uid)
+
+
+@mcp.tool()
+def delete_draft(uid: str) -> dict[str, str]:
+    """Permanently delete one Drafts-folder UID. Only when user requests deletion. Refuses without UIDPLUS; never expunges unrelated mail."""
+    return delete_saved_draft(Config.from_env(), uid)
 
 
 def main() -> None:

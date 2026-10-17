@@ -1,0 +1,9 @@
+include LICENSE README.md CONTRIBUTING.md SECURITY.md uv.lock
+recursive-include docs *.md
+include .agents/plugins/marketplace.json
+include plugins/ionos-mail/.mcp.json
+include plugins/ionos-mail/.codex-plugin/plugin.json
+include plugins/ionos-mail/pyproject.toml plugins/ionos-mail/uv.lock
+include plugins/ionos-mail/README.md plugins/ionos-mail/LICENSE
+recursive-include plugins/ionos-mail/scripts *.py
+recursive-include plugins/ionos-mail/skills *.md
