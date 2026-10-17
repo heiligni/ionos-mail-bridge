@@ -1,13 +1,23 @@
 name: Test
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   unittest:
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
       - run: python -m pip install '.[mcp]'
       - run: python -m unittest discover -s tests -v
       - run: python -c 'from ionos_mail_bridge.mcp_server import mcp; print(type(mcp).__name__)'
+      - name: Build root and standalone plugin distributions
+        run: |
+          python -m pip install build
+          python -m build
+          python -m build plugins/ionos-mail --outdir plugin-dist

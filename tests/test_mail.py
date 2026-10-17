@@ -4,7 +4,7 @@ import tempfile
 from unittest.mock import patch
 
 from ionos_mail_bridge.credentials import save_account, set_region
-from ionos_mail_bridge.mail import Config, _drafts_folder, compose, create_draft, get_message, list_messages, search_messages, send_message, send_saved_draft
+from ionos_mail_bridge.mail import Config, delete_saved_draft, _drafts_folder, compose, create_draft, get_message, list_messages, search_messages, send_message, send_saved_draft
 
 
 CONFIG = Config("sender@example.com", "test-password")
@@ -119,6 +119,90 @@ class MailTests(unittest.TestCase):
         self.assertNotIn("Bcc", message)
         self.assertEqual(sender, "sender@example.com")
         self.assertEqual(recipients, ["to@example.org", "hidden@example.org"])
+
+    def test_reply_draft_preserves_thread_and_uses_read_only_fetch(self):
+        from email.parser import BytesParser
+        from email.policy import default
+        class ReplyIMAP(FakeIMAP):
+            def uid(self, command, *args):
+                self.fetch_args = args
+                return "OK", [(b"header", b"Message-ID: <parent@example.org>\r\nReferences: <root@example.org>\r\n\r\n")]
+        fake = ReplyIMAP()
+        with patch("ionos_mail_bridge.mail.imaplib.IMAP4_SSL", return_value=fake):
+            create_draft(CONFIG, to=["to@example.org"], subject="Re: Hi", body="Reply", reply_to_uid="15")
+        msg = BytesParser(policy=default).parsebytes(fake.appended[2])
+        self.assertEqual(msg["In-Reply-To"], "<parent@example.org>")
+        self.assertEqual(msg["References"], "<root@example.org> <parent@example.org>")
+        self.assertEqual(fake.selected, (b'"INBOX"', True))
+        self.assertIn("BODY.PEEK", fake.fetch_args[1])
+
+    def test_reply_without_message_id_is_not_sent(self):
+        with patch("ionos_mail_bridge.mail.imaplib.IMAP4_SSL", return_value=FakeIMAP()), \
+             patch("ionos_mail_bridge.mail._submit") as submit:
+            with self.assertRaises(ValueError):
+                send_message(CONFIG, to=["to@example.org"], subject="Re: Hi", body="Reply", reply_to_uid="15")
+        submit.assert_not_called()
+
+    def test_delete_draft_only_expunges_target(self):
+        class DeleteIMAP(FakeIMAP):
+            def uid(self, command, *args):
+                self.calls.append((command, args))
+                return super().uid(command, *args)
+        fake = DeleteIMAP()
+        fake.calls = []
+        with patch("ionos_mail_bridge.mail._connect_imap", return_value=fake):
+            result = delete_saved_draft(CONFIG, "15")
+        self.assertEqual(result["status"], "deleted")
+        self.assertEqual(fake.selected, (b'"Saved Drafts"', False))
+        self.assertEqual(fake.calls[-1], ("EXPUNGE", ("15",)))
+        self.assertEqual(fake.calls[-2], ("STORE", ("15", "+FLAGS.SILENT", "(\\Deleted)")))
+
+    def test_delete_without_uidplus_does_not_modify_mail(self):
+        fake = FakeIMAP()
+        fake.capabilities = (b"IMAP4rev1",)
+        with patch("ionos_mail_bridge.mail._connect_imap", return_value=fake), \
+             patch.object(fake, "uid") as uid_call, \
+             patch.object(fake, "select") as select:
+            with self.assertRaisesRegex(RuntimeError, "UIDPLUS"):
+                delete_saved_draft(CONFIG, "15")
+        uid_call.assert_not_called()
+        select.assert_not_called()
+
+    def test_delete_rejects_invalid_uid_before_connect(self):
+        with patch("ionos_mail_bridge.mail._connect_imap") as connect:
+            for uid in ("0", "1:*", "15,16", "", "15\r\n"):
+                with self.assertRaises(ValueError):
+                    delete_saved_draft(CONFIG, uid)
+        connect.assert_not_called()
+
+    def test_delete_missing_uid_does_not_store_or_expunge(self):
+        fake = FakeIMAP()
+        with patch("ionos_mail_bridge.mail._connect_imap", return_value=fake), \
+             patch.object(fake, "uid", return_value=("OK", [None])) as calls:
+            with self.assertRaises(ValueError):
+                delete_saved_draft(CONFIG, "999")
+        self.assertEqual([c.args[0] for c in calls.call_args_list], ["FETCH"])
+
+    def test_delete_store_failure_does_not_expunge(self):
+        fake = FakeIMAP()
+        original_uid = fake.uid
+        def uid(command, *args):
+            return ("NO", [b"denied"]) if command == "STORE" else original_uid(command, *args)
+        with patch("ionos_mail_bridge.mail._connect_imap", return_value=fake), \
+             patch.object(fake, "uid", side_effect=uid) as calls:
+            with self.assertRaisesRegex(RuntimeError, "mark draft"):
+                delete_saved_draft(CONFIG, "15")
+        self.assertNotIn("EXPUNGE", [c.args[0] for c in calls.call_args_list])
+
+    def test_delete_expunge_failure_reports_partial_state(self):
+        fake = FakeIMAP()
+        original_uid = fake.uid
+        def uid(command, *args):
+            return ("NO", [b"denied"]) if command == "EXPUNGE" else original_uid(command, *args)
+        with patch("ionos_mail_bridge.mail._connect_imap", return_value=fake), \
+             patch.object(fake, "uid", side_effect=uid):
+            with self.assertRaisesRegex(RuntimeError, "may remain marked Deleted"):
+                delete_saved_draft(CONFIG, "15")
 
     def test_rejects_header_injection(self):
         with self.assertRaises(ValueError):
